@@ -1,131 +1,84 @@
-const youtubedl = require('youtube-dl-exec');
-const axios = require('axios');
-const config = require('../config');
+const play = require('play-dl');
 const LanguageManager = require('./LanguageManager');
 
 class SoundCloud {
-    // SoundCloud no longer requires client ID, we'll use yt-dlp directly
-
     static async search(query, limit = 1, guildId = null) {
         try {
-
-
             // If it's already a SoundCloud URL, get info directly
             if (this.isSoundCloudURL(query)) {
                 const info = await this.getInfo(query, guildId);
                 return info ? [info] : [];
             }
 
-            // We'll use yt-dlp for SoundCloud search
-            // SoundCloud search: "ytsearch5:query site:soundcloud.com"
-            const searchQuery = `ytsearch${limit}:${query} site:soundcloud.com`;
-
-            const results = await youtubedl(searchQuery, {
-                dumpSingleJson: true,
-                flatPlaylist: true,
-                noCheckCertificates: true,
-                noWarnings: true,
+            // Search SoundCloud
+            const searchResults = await play.search(query, { 
+                limit: limit, 
+                source: { soundcloud: 'tracks' } 
             });
 
-            if (!results || !results.entries) {
-
+            if (!searchResults || searchResults.length === 0) {
                 return [];
             }
 
             const tracks = [];
-            for (const item of results.entries.slice(0, limit)) {
-                try {
-                    // Filter only SoundCloud links
-                    if (item.webpage_url && item.webpage_url.includes('soundcloud.com')) {
-                        const track = await this.formatTrack(item, guildId);
-                        if (track) {
-                            tracks.push(track);
-                        }
-                    }
-                } catch (error) {
-                    continue;
+            for (const track of searchResults) {
+                const formattedTrack = await this.formatTrack(track, guildId);
+                if (formattedTrack) {
+                    tracks.push(formattedTrack);
                 }
             }
-
 
             return tracks;
 
         } catch (error) {
+            console.error('❌ SoundCloud search error:', error.message);
             return [];
         }
     }
 
     static async getInfo(url, guildId = null) {
         try {
-
-
-            // Get SoundCloud info using yt-dlp
-            const info = await youtubedl(url, {
-                dumpSingleJson: true,
-                noCheckCertificates: true,
-                noWarnings: true,
-            });
+            const info = await play.soundcloud(url);
 
             if (!info) {
-                const errorMsg = guildId ? await LanguageManager.getTranslation(guildId, 'soundcloud.no_info_returned') : 'No info returned from SoundCloud';
-                throw new Error(errorMsg);
+                return null;
             }
 
             const track = await this.formatTrack(info, guildId);
-
             return track;
 
         } catch (error) {
+            console.error('❌ SoundCloud getInfo error:', error.message);
             return null;
         }
     }
 
     static async getStream(url, guildId = null, startSeconds = 0) {
         try {
+            const stream = await play.stream(url, { seek: startSeconds });
 
-
-            // Get audio stream using yt-dlp
-            const result = await youtubedl(url, {
-                format: 'bestaudio/best',
-                getUrl: true,
-                noCheckCertificates: true,
-                noWarnings: true,
-            });
-
-            if (!result) {
-                const errorMsg = guildId ? await LanguageManager.getTranslation(guildId, 'soundcloud.no_stream_url') : 'No stream URL found';
-                throw new Error(errorMsg);
-            }
-
-            // Note: SoundCloud streams typically don't support seek via URL parameters
-            // Seeking will be handled by FFmpeg in MusicPlayer
-            return result;
+            return {
+                url: stream.stream,
+                type: stream.type === 'opus' ? 'opus' : 'arbitrary',
+            };
 
         } catch (error) {
+            console.error('❌ SoundCloud getStream error:', error.message);
             throw error;
         }
     }
 
     static async getPlaylist(url, guildId = null) {
         try {
+            const playlist = await play.soundcloud(url);
 
-
-            // Get playlist info using yt-dlp
-            const result = await youtubedl(url, {
-                dumpSingleJson: true,
-                flatPlaylist: true,
-                noCheckCertificates: true,
-                noWarnings: true,
-            });
-
-            if (!result || !result.entries) {
-                const errorMsg = guildId ? await LanguageManager.getTranslation(guildId, 'soundcloud.no_playlist_tracks') : 'No playlist tracks found';
-                throw new Error(errorMsg);
+            if (!playlist || playlist.type !== 'playlist') {
+                return null;
             }
 
             const tracks = [];
-            for (const item of result.entries.slice(0, config.bot.maxPlaylistSize)) {
-                const formattedTrack = await this.formatTrack(item, guildId);
+            for (const track of playlist.tracks) {
+                const formattedTrack = await this.formatTrack(track, guildId);
                 if (formattedTrack) {
                     tracks.push(formattedTrack);
                 }
@@ -134,50 +87,31 @@ class SoundCloud {
             const unknownPlaylist = guildId ? await LanguageManager.getTranslation(guildId, 'soundcloud.unknown_playlist') : 'Unknown Playlist';
 
             return {
-                title: result.title || result.playlist_title || unknownPlaylist,
+                title: playlist.name || unknownPlaylist,
                 tracks: tracks,
-                totalTracks: result.playlist_count || tracks.length,
+                totalTracks: playlist.tracksCount || tracks.length,
                 url: url,
                 platform: 'soundcloud',
                 type: 'playlist',
-                description: result.description,
-                user: result.uploader || result.playlist_uploader,
+                description: playlist.description,
+                user: playlist.user?.name || playlist.user?.username,
             };
 
         } catch (error) {
+            console.error('❌ SoundCloud getPlaylist error:', error.message);
             return null;
         }
     }
 
     static async getUserTracks(userUrl, limit = 10, guildId = null) {
         try {
-
-            // Use yt-dlp for SoundCloud user profile
-            // Get user's latest tracks
-            const result = await youtubedl(userUrl, {
-                dumpSingleJson: true,
-                flatPlaylist: true,
-                playlistEnd: limit,
-                noCheckCertificates: true,
-                noWarnings: true,
-            });
-
-            if (!result || !result.entries) {
-                return [];
-            }
-
-            const tracks = [];
-            for (const item of result.entries.slice(0, limit)) {
-                const formattedTrack = await this.formatTrack(item, guildId);
-                if (formattedTrack) {
-                    tracks.push(formattedTrack);
-                }
-            }
-
-
-            return tracks;
+            // play-dl doesn't have direct user track fetching
+            // This is a limitation compared to yt-dlp
+            console.warn('⚠️ getUserTracks not fully supported with play-dl');
+            return [];
 
         } catch (error) {
+            console.error('❌ SoundCloud getUserTracks error:', error.message);
             return [];
         }
     }
@@ -188,24 +122,25 @@ class SoundCloud {
             const unknownArtist = guildId ? await LanguageManager.getTranslation(guildId, 'soundcloud.unknown_artist') : 'Unknown Artist';
 
             const track = {
-                title: soundcloudTrack.title || soundcloudTrack.fulltitle || unknownTitle,
-                artist: soundcloudTrack.uploader || soundcloudTrack.artist || unknownArtist,
-                url: soundcloudTrack.webpage_url || soundcloudTrack.url,
-                duration: soundcloudTrack.duration || 0,
+                title: soundcloudTrack.name || soundcloudTrack.title || unknownTitle,
+                artist: soundcloudTrack.user?.name || soundcloudTrack.user?.username || soundcloudTrack.publisher?.name || unknownArtist,
+                url: soundcloudTrack.url || soundcloudTrack.permalink,
+                duration: soundcloudTrack.durationInSec || 0,
                 thumbnail: soundcloudTrack.thumbnail,
                 platform: 'soundcloud',
                 type: 'track',
                 id: soundcloudTrack.id,
                 description: soundcloudTrack.description,
-                uploadDate: soundcloudTrack.upload_date,
-                viewCount: soundcloudTrack.view_count,
-                likeCount: soundcloudTrack.like_count,
-                channel: soundcloudTrack.channel,
-                channelId: soundcloudTrack.channel_id,
+                uploadDate: soundcloudTrack.publishedAt,
+                viewCount: soundcloudTrack.playCount,
+                likeCount: soundcloudTrack.likes,
+                channel: soundcloudTrack.user?.name || soundcloudTrack.user?.username,
+                channelId: soundcloudTrack.user?.id,
             };
 
             return track;
         } catch (error) {
+            console.error('❌ SoundCloud formatTrack error:', error.message);
             return null;
         }
     }
@@ -228,7 +163,6 @@ class SoundCloud {
     }
 
     static isUser(url) {
-        // Check if it's a user profile URL (no track or playlist path)
         const match = url.match(/^https?:\/\/(www\.)?soundcloud\.com\/([\w-]+)$/);
         return !!match;
     }
@@ -254,13 +188,8 @@ class SoundCloud {
                 return false;
             }
 
-            // URL validation with yt-dlp
-            const info = await youtubedl(url, {
-                dumpSingleJson: true,
-                noCheckCertificates: true,
-                noWarnings: true,
-            });
-            return !!info && !!info.title;
+            const info = await play.soundcloud(url);
+            return !!info && !!(info.name || info.title);
 
         } catch (error) {
             return false;
@@ -295,11 +224,8 @@ class SoundCloud {
 
     static async getRelatedTracks(trackUrl, limit = 5) {
         try {
-
-            // This would implement getting related tracks
-            // For now, return empty array as it requires complex implementation
+            // Not supported by play-dl
             return [];
-
         } catch (error) {
             return [];
         }
@@ -307,44 +233,8 @@ class SoundCloud {
 
     static async searchAdvanced(query, options = {}, guildId = null) {
         try {
-            // Advanced search using yt-dlp (simplified)
-            return await this.search(query, options.limit || 20, guildId);
-
-            const {
-                limit = 20,
-                offset = 0,
-                filter = 'all', // 'all', 'tracks', 'playlists', 'users'
-                sort = 'relevance' // 'relevance', 'created_at', 'hotness', 'duration'
-            } = options;
-
-            const searchUrl = `https://api-v2.soundcloud.com/search`;
-            const params = {
-                q: query,
-                client_id: this.clientId,
-                limit: limit,
-                offset: offset,
-                filter: filter,
-                sort: sort,
-            };
-
-            const response = await axios.get(searchUrl, { params });
-
-            if (!response.data || !response.data.collection) {
-                return [];
-            }
-
-            const tracks = [];
-            for (const item of response.data.collection) {
-                if (item.kind === 'track') {
-                    const track = await this.formatTrack(item);
-                    if (track) {
-                        tracks.push(track);
-                    }
-                }
-            }
-
-            return tracks;
-
+            const { limit = 20 } = options;
+            return await this.search(query, limit, guildId);
         } catch (error) {
             return [];
         }
