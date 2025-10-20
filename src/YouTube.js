@@ -4,19 +4,25 @@ const LanguageManager = require('./LanguageManager');
 class YouTube {
     static async search(query, limit = 1, guildId = null) {
         try {
+            console.log('🔍 YouTube search called with:', query);
+            
             // If it's already a YouTube URL, get info directly
             if (this.isYouTubeURL(query)) {
+                console.log('✓ Detected YouTube URL');
                 const info = await this.getInfo(query, guildId);
                 return info ? [info] : [];
             }
 
+            console.log('✓ Performing YouTube search');
             // Search YouTube
             const searchResults = await play.search(query, { limit: limit, source: { youtube: 'video' } });
 
             if (!searchResults || searchResults.length === 0) {
+                console.log('❌ No search results found');
                 return [];
             }
 
+            console.log(`✓ Found ${searchResults.length} results`);
             const tracks = [];
             for (const video of searchResults) {
                 const unknownTitle = guildId ? await LanguageManager.getTranslation(guildId, 'youtube.unknown_title') : 'Unknown Title';
@@ -39,19 +45,24 @@ class YouTube {
                 tracks.push(track);
             }
 
+            console.log('✓ Formatted tracks successfully');
             return tracks;
 
         } catch (error) {
             console.error('❌ YouTube search error:', error.message);
+            console.error('Stack:', error.stack);
             return [];
         }
     }
 
     static async getInfo(url, guildId = null) {
         try {
+            console.log('🔍 Getting video info for:', url);
+            
             const info = await play.video_info(url);
 
             if (!info || !info.video_details) {
+                console.log('❌ No video info returned');
                 return null;
             }
 
@@ -73,50 +84,81 @@ class YouTube {
                 description: video.description,
             };
 
+            console.log('✓ Video info retrieved:', track.title);
             return track;
 
         } catch (error) {
             console.error('❌ YouTube getInfo error:', error.message);
+            console.error('Stack:', error.stack);
             return null;
         }
     }
 
     static async getStream(url, guildId = null, startSeconds = 0) {
         try {
+            console.log('🎵 Getting stream for:', url);
+            
             if (!url) {
                 const errorMsg = guildId ? await LanguageManager.getTranslation(guildId, 'youtube.url_required') : 'URL is required';
                 throw new Error(errorMsg);
             }
 
-            const stream = await play.stream(url, { seek: startSeconds });
+            // Clean the URL - remove tracking parameters like ?si=
+            let cleanUrl = url;
+            if (url.includes('?si=')) {
+                cleanUrl = url.split('?si=')[0];
+                console.log('🧹 Cleaned URL:', cleanUrl);
+            }
+            
+            // Validate it's a proper YouTube URL
+            if (!play.yt_validate(cleanUrl)) {
+                console.error('❌ Invalid YouTube URL:', cleanUrl);
+                throw new Error('Invalid YouTube URL');
+            }
 
+            console.log('✓ URL validated, fetching stream...');
+            const stream = await play.stream(cleanUrl, { 
+                quality: 2, // 0 = lowest, 1 = medium, 2 = highest
+                seek: startSeconds 
+            });
+
+            console.log('✓ Stream obtained, type:', stream.type);
+            
             return {
+                stream: stream.stream,
+                type: stream.type,
                 url: stream.stream,
-                type: stream.type === 'opus' ? 'opus' : 'arbitrary',
                 duration: 0,
                 canSeek: true,
             };
 
         } catch (error) {
             console.error('❌ YouTube getStream error:', error.message);
+            console.error('Full error:', error);
             throw error;
         }
     }
 
     static async getPlaylist(url, guildId = null) {
         try {
+            console.log('📋 Getting playlist for:', url);
+            
             const playlist = await play.playlist_info(url, { incomplete: true });
 
             if (!playlist) {
+                console.log('❌ No playlist info returned');
                 return null;
             }
 
+            console.log('✓ Fetching playlist videos...');
             const videos = await playlist.all_videos();
 
             if (!videos || videos.length === 0) {
+                console.log('❌ No videos in playlist');
                 return null;
             }
 
+            console.log(`✓ Found ${videos.length} videos in playlist`);
             const unknownTitle = guildId ? await LanguageManager.getTranslation(guildId, 'youtube.unknown_title') : 'Unknown Title';
             const unknownArtist = guildId ? await LanguageManager.getTranslation(guildId, 'youtube.unknown_artist') : 'Unknown Artist';
 
@@ -138,6 +180,7 @@ class YouTube {
 
             const unknownPlaylist = guildId ? await LanguageManager.getTranslation(guildId, 'youtube.unknown_playlist') : 'Unknown Playlist';
 
+            console.log('✓ Playlist processed successfully');
             return {
                 title: playlist.title || unknownPlaylist,
                 tracks: tracks,
@@ -149,6 +192,7 @@ class YouTube {
 
         } catch (error) {
             console.error('❌ YouTube getPlaylist error:', error.message);
+            console.error('Stack:', error.stack);
             return null;
         }
     }
