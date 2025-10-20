@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 
 // Initialize JSON database
-const { JsonDB, Config } = require('node-json-db');
 const db = new JsonDB(new Config('database/languages', true, true, '/'));
 
 /**
@@ -230,3 +229,4 @@ const languageManager = new LanguageManager();
 
 
 module.exports = languageManager;
+
