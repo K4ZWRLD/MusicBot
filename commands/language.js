@@ -1,11 +1,11 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
-const { JsonDB, Config } = require('node-json-db');
+const { JsonDB } = require('node-json-db');
 const fs = require('fs');
 const path = require('path');
 const LanguageManager = require('../src/LanguageManager');
 
 // Initialize JSON database
-const db = new JsonDB(new Config('database/languages', true, true, '/'));
+const db = new JsonDB('database/languages', true, true, '/');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -184,3 +184,4 @@ module.exports = {
         }
     }
 };
+
