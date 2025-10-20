@@ -49,154 +49,86 @@ module.exports = {
             await interaction.editReply({ content: searchingMsg });
 
             // Sadece müzik verilerini al (player'a ekleme yapma)
-            const trackData = await this.getTrackData(query, guild.id);
+           async getTrackData(query, guildId) {
+    const YouTube = require('../src/YouTube');
+    const Spotify = require('../src/Spotify');
+    const SoundCloud = require('../src/SoundCloud');
+    const DirectLink = require('../src/DirectLink');
 
-            if (!trackData.success) {
-                return await interaction.editReply({
-                    content: trackData.message
-                });
-            }
+    try {
+        let tracks = [];
+        let isPlaylist = false;
 
+        // Platform tespiti
+        const platform = this.detectPlatform(query);
 
-
-            // Embed Manager'a gönder
-            if (!client.musicEmbedManager) {
-                client.musicEmbedManager = new MusicEmbedManager(client);
-            }
-
-            const embedResult = await client.musicEmbedManager.handleMusicData(
-                guild.id,
-                trackData,
-                member,
-                interaction
-            );
-
-            if (!embedResult.success) {
-                return await interaction.editReply({
-                    content: embedResult.message
-                });
-            }
-
-        } catch (error) {
-            const errorMsg = await LanguageManager.getTranslation(interaction.guild.id, 'commands.play.error_playing');
-
-            try {
-                if (interaction.deferred && !interaction.replied) {
-                    await interaction.editReply({ content: errorMsg });
-                } else if (!interaction.replied && !interaction.deferred) {
-                    await interaction.reply({ content: errorMsg, ephemeral: true });
-                }
-            } catch (responseError) {
-                console.error('Error sending error response:', responseError);
-            }
-        }
-    },
-
-    async validateRequest(interaction, member, guild) {
-        // Ses kanalı kontrolü
-        if (!member.voice.channel) {
-            const errorMsg = await LanguageManager.getTranslation(guild.id, 'commands.play.voice_channel_required');
-            return { success: false, message: errorMsg };
-        }
-
-        // İzin kontrolü
-        const permissions = member.voice.channel.permissionsFor(guild.members.me);
-        if (!permissions.has(PermissionFlagsBits.Connect) || !permissions.has(PermissionFlagsBits.Speak)) {
-            const errorMsg = await LanguageManager.getTranslation(guild.id, 'commands.play.no_permissions');
-            return { success: false, message: errorMsg };
-        }
-
-        // Bot farklı kanalda mı kontrolü
-        const botVoiceChannel = guild.members.me.voice.channel;
-        if (botVoiceChannel && botVoiceChannel.id !== member.voice.channel.id) {
-            const errorMsg = await LanguageManager.getTranslation(guild.id, 'commands.play.same_channel_required');
-            return { success: false, message: errorMsg };
-        }
-
-        return { success: true };
-    },
-
-    async getTrackData(query, guildId) {
-        const YouTube = require('../src/YouTube');
-        const Spotify = require('../src/Spotify');
-        const SoundCloud = require('../src/SoundCloud');
-        const DirectLink = require('../src/DirectLink');
-
-        try {
-            let tracks = [];
-            let isPlaylist = false;
-
-            // Platform tespiti
-            const platform = this.detectPlatform(query);
-
-            switch (platform) {
-                case 'youtube':
-                    // YouTube playlist/video kontrolü
-                    if (YouTube.isPlaylist && YouTube.isPlaylist(query)) {
-                        const playlistData = await YouTube.getPlaylist(query, guildId);
-                        if (playlistData && playlistData.tracks && playlistData.tracks.length > 0) {
-                            tracks = playlistData.tracks;
-                            isPlaylist = true;
-                        } else {
-                            // Playlist yüklenemezse normal arama yap
-                            tracks = await YouTube.search(query, 1, guildId);
-                        }
+        switch (platform) {
+            case 'youtube':
+                // YouTube playlist/video kontrolü
+                if (YouTube.isPlaylist && YouTube.isPlaylist(query)) {
+                    const playlistData = await YouTube.getPlaylist(query, guildId);
+                    if (playlistData && playlistData.tracks && playlistData.tracks.length > 0) {
+                        tracks = playlistData.tracks;
+                        isPlaylist = true;
                     } else {
+                        // Playlist yüklenemezse normal arama yap
                         tracks = await YouTube.search(query, 1, guildId);
                     }
-                    break;
-
-                case 'spotify':
-                    // Check if it's a Spotify URL (playlist, album, track, or artist)
-                    if (Spotify.isSpotifyURL(query)) {
-                        const spotifyData = await Spotify.getFromURL(query, guildId);
-                        tracks = spotifyData || [];
-                        // Check if it's a playlist/album/artist (multiple tracks)
-                        const { type } = Spotify.parseSpotifyURL(query);
-                        isPlaylist = type === 'playlist' || type === 'album' || type === 'artist';
-                    } else {
-                        // Regular search
-                        const spotifyData = await Spotify.search(query, 1, 'track', guildId);
-                        tracks = spotifyData || [];
-                    }
-                    break;
-
-                case 'soundcloud':
-                    const soundcloudData = await SoundCloud.search(query, 1, guildId);
-                    tracks = soundcloudData || [];
-                    break;
-
-                case 'direct':
-                    const directData = await DirectLink.getInfo(query);
-                    tracks = directData || [];
-                    break;
-
-                default:
-                    // Varsayılan YouTube arama
+                } else {
                     tracks = await YouTube.search(query, 1, guildId);
-            }
+                }
+                break;
 
-           if (!tracks || tracks.length === 0) {
-    console.error('❌ No tracks returned for query:', query);
-    console.error('Platform detected:', platform);
-    const errorMsg = await LanguageManager.getTranslation(guildId, 'musicplayer.no_results_found');
-    return { success: false, message: errorMsg };
-}
-            }
+            case 'spotify':
+                // Check if it's a Spotify URL (playlist, album, track, or artist)
+                if (Spotify.isSpotifyURL(query)) {
+                    const spotifyData = await Spotify.getFromURL(query, guildId);
+                    tracks = spotifyData || [];
+                    // Check if it's a playlist/album/artist (multiple tracks)
+                    const { type } = Spotify.parseSpotifyURL(query);
+                    isPlaylist = type === 'playlist' || type === 'album' || type === 'artist';
+                } else {
+                    // Regular search
+                    const spotifyData = await Spotify.search(query, 1, 'track', guildId);
+                    tracks = spotifyData || [];
+                }
+                break;
 
-            return {
-                success: true,
-                isPlaylist: isPlaylist,
-                tracks: tracks
-            };
+            case 'soundcloud':
+                const soundcloudData = await SoundCloud.search(query, 1, guildId);
+                tracks = soundcloudData || [];
+                break;
 
-       } catch (error) {
-    console.error('❌ getTrackData error:', error.message);
-    console.error('Full error:', error);
-    const errorMsg = await LanguageManager.getTranslation(guildId, 'commands.play.error_searching');
-    return { success: false, message: errorMsg };
-}
-    },
+            case 'direct':
+                const directData = await DirectLink.getInfo(query);
+                tracks = directData || [];
+                break;
+
+            default:
+                // Varsayılan YouTube arama
+                tracks = await YouTube.search(query, 1, guildId);
+        }
+
+        if (!tracks || tracks.length === 0) {
+            console.error('❌ No tracks returned for query:', query);
+            console.error('Platform detected:', platform);
+            const errorMsg = await LanguageManager.getTranslation(guildId, 'musicplayer.no_results_found');
+            return { success: false, message: errorMsg };
+        }
+
+        return {
+            success: true,
+            isPlaylist: isPlaylist,
+            tracks: tracks
+        };
+
+    } catch (error) {
+        console.error('❌ getTrackData error:', error.message);
+        console.error('Full error:', error);
+        const errorMsg = await LanguageManager.getTranslation(guildId, 'commands.play.error_searching');
+        return { success: false, message: errorMsg };
+    }
+},
 
     detectPlatform(query) {
         if (query.includes('youtube.com') || query.includes('youtu.be')) {
@@ -213,3 +145,4 @@ module.exports = {
     }
 
 };
+
