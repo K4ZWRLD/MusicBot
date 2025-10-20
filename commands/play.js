@@ -176,9 +176,12 @@ module.exports = {
                     tracks = await YouTube.search(query, 1, guildId);
             }
 
-            if (!tracks || tracks.length === 0) {
-                const errorMsg = await LanguageManager.getTranslation(guildId, 'musicplayer.no_results_found');
-                return { success: false, message: errorMsg };
+           if (!tracks || tracks.length === 0) {
+    console.error('❌ No tracks returned for query:', query);
+    console.error('Platform detected:', platform);
+    const errorMsg = await LanguageManager.getTranslation(guildId, 'musicplayer.no_results_found');
+    return { success: false, message: errorMsg };
+}
             }
 
             return {
@@ -187,10 +190,12 @@ module.exports = {
                 tracks: tracks
             };
 
-        } catch (error) {
-            const errorMsg = await LanguageManager.getTranslation(guildId, 'commands.play.error_searching');
-            return { success: false, message: errorMsg };
-        }
+       } catch (error) {
+    console.error('❌ getTrackData error:', error.message);
+    console.error('Full error:', error);
+    const errorMsg = await LanguageManager.getTranslation(guildId, 'commands.play.error_searching');
+    return { success: false, message: errorMsg };
+}
     },
 
     detectPlatform(query) {
@@ -206,4 +211,5 @@ module.exports = {
             return 'youtube'; // Default to YouTube search
         }
     }
+
 };
