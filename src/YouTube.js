@@ -126,19 +126,24 @@ class YouTube {
                 throw new Error('Invalid YouTube URL');
             }
 
-            console.log('✓ URL validated, fetching stream...');
-            const streamData = await play.stream(cleanUrl, { 
+            console.log('✓ URL validated, getting video info first...');
+            
+            // Get video info first - this is required for play-dl to work properly
+            const info = await play.video_info(cleanUrl);
+            console.log('✓ Video info obtained:', info.video_details.title);
+            
+            // Now get stream using the video info
+            const streamData = await play.stream_from_info(info, { 
                 quality: 2 // 0 = lowest, 1 = medium, 2 = highest
             });
 
             console.log('✓ Stream obtained, type:', streamData.type);
-            console.log('✓ Stream object keys:', Object.keys(streamData));
             
             return {
                 stream: streamData.stream,
                 type: streamData.type,
                 url: cleanUrl,
-                duration: 0,
+                duration: info.video_details.durationInSec || 0,
                 canSeek: false,
             };
 
