@@ -96,7 +96,7 @@ class YouTube {
 
     static async getStream(url, guildId = null, startSeconds = 0) {
         try {
-            console.log('🎵 Getting stream for:', url);
+            console.log('🎵 Getting stream for:', url, 'Type:', typeof url);
             
             if (!url) {
                 const errorMsg = guildId ? await LanguageManager.getTranslation(guildId, 'youtube.url_required') : 'URL is required';
@@ -104,32 +104,42 @@ class YouTube {
             }
 
             // Clean the URL - remove tracking parameters like ?si=
-            let cleanUrl = url;
-            if (url.includes('?si=')) {
-                cleanUrl = url.split('?si=')[0];
+            let cleanUrl = String(url);
+            if (cleanUrl.includes('?si=')) {
+                cleanUrl = cleanUrl.split('?si=')[0];
                 console.log('🧹 Cleaned URL:', cleanUrl);
             }
             
+            // Also remove any other query parameters that might cause issues
+            if (cleanUrl.includes('&')) {
+                const baseUrl = cleanUrl.split('&')[0];
+                cleanUrl = baseUrl;
+                console.log('🧹 Further cleaned URL:', cleanUrl);
+            }
+            
             // Validate it's a proper YouTube URL
-            if (!play.yt_validate(cleanUrl)) {
+            const isValid = await play.yt_validate(cleanUrl);
+            console.log('🔍 URL validation result:', isValid, 'for URL:', cleanUrl);
+            
+            if (!isValid || isValid === 'search') {
                 console.error('❌ Invalid YouTube URL:', cleanUrl);
                 throw new Error('Invalid YouTube URL');
             }
 
             console.log('✓ URL validated, fetching stream...');
-            const stream = await play.stream(cleanUrl, { 
-                quality: 2, // 0 = lowest, 1 = medium, 2 = highest
-                seek: startSeconds 
+            const streamData = await play.stream(cleanUrl, { 
+                quality: 2 // 0 = lowest, 1 = medium, 2 = highest
             });
 
-            console.log('✓ Stream obtained, type:', stream.type);
+            console.log('✓ Stream obtained, type:', streamData.type);
+            console.log('✓ Stream object keys:', Object.keys(streamData));
             
             return {
-                stream: stream.stream,
-                type: stream.type,
-                url: stream.stream,
+                stream: streamData.stream,
+                type: streamData.type,
+                url: cleanUrl,
                 duration: 0,
-                canSeek: true,
+                canSeek: false,
             };
 
         } catch (error) {
