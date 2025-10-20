@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Initialize JSON database
-const db = new JsonDB(new Config('database/languages', true, true, '/'));
+const db = new JsonDB('database/languages', true, true, '/');
 
 /**
  * Language utility functions for the Discord bot
@@ -229,4 +229,5 @@ const languageManager = new LanguageManager();
 
 
 module.exports = languageManager;
+
 
