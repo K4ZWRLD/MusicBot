@@ -92,8 +92,10 @@ class YouTube {
             return tracks;
 
         } catch (error) {
-            return [];
-        }
+    console.error('❌ YouTube search error:', error.message);
+    console.error('Full error:', error);
+    return [];
+}
     }
 
     static async getInfo(url, guildId = null) {
@@ -132,8 +134,10 @@ class YouTube {
             return track;
 
         } catch (error) {
-            return null;
-        }
+    console.error('❌ YouTube getInfo error:', error.message);
+    console.error('Full error:', error);
+    return null;
+}
     }
 
     static async getStream(url, guildId = null, startSeconds = 0) {
@@ -352,5 +356,6 @@ class YouTube {
         }
     }
 }
+
 
 module.exports = YouTube;
